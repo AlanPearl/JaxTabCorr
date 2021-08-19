@@ -1,42 +1,3 @@
-# JaxTabCorr - JAX + TabCorr
-
-This is a partially rewritten version of the Python module TabCorr. It has been rewritten using JAX as a replacement for NumPy, which allows for easy differentiation, which is helpful for speeding up Bayesian inference compared to traditional MCMC methods. The API and following example script is nearly identical to that of TabCorr, allowing for minimal changes to preexisting code.
-
-# TabCorr - Tabulated Correlation functions for halotools
-
-This Python module provides extremely efficient and precise calculations of galaxy correlation functions in halotools using tabulated values. It is specifically intended for Markov chain monte carlo (MCMC) exploration of the galaxy-halo connection. It implements the method described in Zheng et al. (2016, http://adsabs.harvard.edu/abs/2016MNRAS.458.4015Z) of tabulating correlation functions that only need to be convolved with the mean halo occupation to obtain the full correlation function of galaxies.
-
----
-
-### Prerequisites
-
-The following python packages (and their prerequisites) are required for running this module.
-
-* jax
-* h5py
-* numpy
-* astropy
-* halotools
-
-This module has been tested with Python 3.8.
-
----
-
-### Installation
-
-The package can be installed via pip from the main directory.
-
-```
-pip3 install --user .
-```
-
----
-
-### Usage
-
-The following code demonstrates the basic usage of TabCorr. Scroll down to `# PART 2` to see the new functionality available using JAX.
-
-```
 import numpy as np
 from matplotlib import cm
 from matplotlib import colors
@@ -156,25 +117,3 @@ plt.gcf().set_facecolor("white")
 plt.savefig('wp_derivative_vs_logm1.png', dpi=300);
 plt.show()
 plt.close()
-```
-
-The above code will generate the following figures.
-
-![wp_decomposition](scripts/wp_decomposition.png)
-![wp_vs_logm1](scripts/wp_vs_logm1.png)
-![wp_derivative_vs_logm1](scripts/wp_derivative_vs_logm1.png)
-
----
-
-### To-do list
-
-* Currently, the only halotools model that has been implemented in a JAX-compatible
-  way is the Zheng07 HOD model. It is very easy to implement these models, so 
-  feel free to contact me requesting implementation of another halotools model.
-
----
-
-### Authors
-
-Alan Pearl
-Johannes Ulf Lange (author of TabCorr)
