@@ -13,10 +13,11 @@ This Python module provides extremely efficient and precise calculations of gala
 The following python packages (and their prerequisites) are required for running this module.
 
 * jax
+* tabcorr
+* halotools
 * h5py
 * numpy
 * astropy
-* halotools
 
 This module has been tested with Python 3.8.
 
@@ -153,8 +154,7 @@ plt.xlabel("$\\rm \\log M_1$")
 plt.ylabel("$\\rm w_p(r_p = 0.1 h^{-1} Mpc)$")
 plt.tight_layout(pad=0.3)
 plt.gcf().set_facecolor("white")
-plt.savefig('wp_derivative_vs_logm1.png', dpi=300);
-plt.show()
+plt.savefig('wp_derivative_vs_logm1.png', dpi=300); plt.show()
 plt.close()
 ```
 
@@ -176,5 +176,5 @@ The above code will generate the following figures.
 
 ### Authors
 
-Alan Pearl
-Johannes Ulf Lange (author of TabCorr)
+- Alan Pearl
+- Johannes Ulf Lange (author of TabCorr)
