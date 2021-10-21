@@ -138,7 +138,7 @@ lensingtab = JaxTabCorr.tabulate(
 for logm1 in np.linspace(12.0, 12.8, 1000):
     model.param_dict['logM1'] = logm1
     ngal, ds = lensingtab.predict(model)
-    ds = ds / 1e12 / bplcosmo.h  # convert to conventional units
+    ds = ds / 1e12  # convert Mpc -> pc
     plt.plot(rp_ave, ds, color=sm.to_rgba(logm1), lw=0.1)
 
 cb = plt.colorbar(sm)
