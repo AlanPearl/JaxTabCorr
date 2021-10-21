@@ -156,6 +156,41 @@ plt.tight_layout(pad=0.3)
 plt.gcf().set_facecolor("white")
 plt.savefig("wp_derivative_vs_sigma_logm.png", dpi=300); plt.show()
 plt.close()
+
+
+# PART 3: THIS AlSO WORKS FOR GALAXY-GALAXY LENSING
+# =================================================
+# Get the position of a representative subsample of the simulation particles
+particle_positions = np.array([halocat.ptcl_table[x] for x in "xyz"]).T
+subsample = np.random.choice(np.arange(len(particle_positions)), int(1e5), replace=False)
+particle_positions = particle_positions[subsample]
+
+downsampling_factor = (halocat.num_ptcl_per_dim**3) / float(len(particle_positions))
+effective_particle_masses = halocat.particle_mass * downsampling_factor
+
+# Positional arguments passed to the mean_delta_sigma function
+args = particle_positions, effective_particle_masses, rp_bins
+
+lensingtab = JaxTabCorr.tabulate(
+    halocat, mean_delta_sigma, *args, mode="cross",
+    cosmology=bplcosmo)
+
+for logm1 in np.linspace(12.0, 12.8, 1000):
+    model.param_dict['logM1'] = logm1
+    ngal, ds = lensingtab.predict(model)
+    ds = ds / 1e12 / bplcosmo.h  # convert to conventional units
+    plt.plot(rp_ave, ds, color=sm.to_rgba(logm1), lw=0.1)
+
+cb = plt.colorbar(sm)
+cb.set_label(r'$\log M_1$')
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel(r'$r_p \ [h^{-1} \ \mathrm{Mpc}]$')
+plt.ylabel(r'$\Delta \Sigma \ [h \  M_\odot/\mathrm{pc}^2]$')
+plt.tight_layout(pad=0.3)
+plt.gcf().set_facecolor("white")
+plt.savefig('gglens_vs_logm1.png', dpi=300); plt.show()
+plt.close()
 ```
 
 The above code will generate the following figures.
@@ -163,6 +198,7 @@ The above code will generate the following figures.
 ![wp_decomposition](scripts/wp_decomposition.png)
 ![wp_vs_logm1](scripts/wp_vs_logm1.png)
 ![wp_derivative_vs_logm1](scripts/wp_derivative_vs_logm1.png)
+![gglens_vs_logm1](scripts/gglens_vs_logm1.png)
 
 ---
 
