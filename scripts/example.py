@@ -92,28 +92,27 @@ def wprp(x):
     ngal, wp = halotab.predict(model)
     return wp
 
-
-# Then, we can get a function to calculate the Jacobian, which
+# Then, we can get a function to calculate the Jacobian, which 
 # will return the matrix J[i, j] = dy[i]/dx[j]:
 wprp_jacobian = jax.jacfwd(wprp)
 
-for logm1 in np.linspace(12.0, 12.8, 10):
+# sigma_logm_truth = 0.25
+for sigma_logm in np.linspace(0.1, 1.0, 10):
     # Explicitly hold all other parameters constant
-    logmmin, sigma_logm, logm0, alpha = 11.35, 0.25, 11.2, 0.83
+    logmmin, logm0, logm1, alpha = 11.35, 11.2, 12.4, 0.83
     hod_params = np.array([logmmin, sigma_logm, logm0, logm1, alpha])
-
-    # Get the value and derivative for the 0th rp bin of wp
-    # with respect to the 3rd parameter, logM1
+    
+    # Get the value and derivative for the 0th rp bin of wp 
+    # with respect to the 1st parameter, sigma_logM
     value = wprp(hod_params)[0]
-    derivative = wprp_jacobian(hod_params)[0, 3]
+    derivative = wprp_jacobian(hod_params)[0, 1]
+    
+    plt.plot(sigma_logm, value, "bo")
+    plt.quiver(sigma_logm, value, 1, derivative, angles="xy")
 
-    plt.plot(logm1, value, "bo")
-    plt.quiver(logm1, value, 1, derivative, angles="xy")
-
-plt.xlabel("$\\rm \\log M_1$")
+plt.xlabel("$\\rm \\sigma_{\\log M}$")
 plt.ylabel("$\\rm w_p(r_p = 0.1 h^{-1} Mpc)$")
 plt.tight_layout(pad=0.3)
 plt.gcf().set_facecolor("white")
-plt.savefig('wp_derivative_vs_logm1.png', dpi=300);
-plt.show()
+plt.savefig("wp_derivative_vs_sigma_logm.png", dpi=300); plt.show()
 plt.close()
