@@ -1,8 +1,43 @@
-import warnings
-from halotools.empirical_models.occupation_models.zheng07_components import *
-
 import jax
 from jax import numpy as jnp
+# import numpy as np
+from halotools.empirical_models.occupation_models.zheng07_components import *
+from halotools.empirical_models.occupation_models.zheng07_components import HalotoolsError
+
+
+def vectorized_cond(pred, true_fun, false_fun, operand, safe_operand_value=0):
+    # Taken from https://github.com/google/jax/issues/1052
+    # ====================================================
+    # true_fun and false_fun must act elementwise (i.e. be vectorized)
+    true_op = jnp.where(pred, operand, safe_operand_value)
+    false_op = jnp.where(pred, safe_operand_value, operand)
+    return jnp.where(pred, true_fun(true_op), false_fun(false_op))
+
+
+def zheng07_cenocc(mass, logmmin, sigma_logm):
+    logm = jnp.log10(mass)
+    return 0.5 * (1.0 + jax.scipy.special.erf((logm - logmmin) / sigma_logm))
+
+
+def zheng07_satocc(mass, logm0, logm1, alpha):
+    m0 = 10. ** logm0
+    m1 = 10. ** logm1
+    is_nonzero = mass > m0
+
+    def nonzero_func(x):
+        return ((x - m0) / m1) ** alpha
+
+    def zero_func(x):
+        return 0
+
+    mean_nsat = vectorized_cond(is_nonzero, nonzero_func, zero_func, mass,
+                                safe_operand_value=m0 + m1)
+    return mean_nsat
+
+
+zheng07_cenocc = jax.jit(zheng07_cenocc)
+zheng07_satocc = jax.jit(zheng07_satocc)
+
 
 class JaxZheng07Cens(Zheng07Cens):
     def mean_occupation(self, **kwargs):
@@ -13,14 +48,12 @@ class JaxZheng07Cens(Zheng07Cens):
             mass = jnp.atleast_1d(kwargs['prim_haloprop'])
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
-                "to the ``mean_occupation`` function of the ``Zheng07Cens`` class.\n")
+                   "to the ``mean_occupation`` function of the ``Zheng07Cens`` class.\n")
             raise HalotoolsError(msg)
 
-        logM = jnp.log10(mass)
-        mean_ncen = 0.5*(1.0 + jax.scipy.special.erf(
-            (logM - self.param_dict['logMmin']) / self.param_dict['sigma_logM']))
+        return zheng07_cenocc(mass, self.param_dict["logMmin"],
+                              self.param_dict["sigma_logM"])
 
-        return mean_ncen
 
 class JaxZheng07Sats(Zheng07Sats):
     def mean_occupation(self, **kwargs):
@@ -36,33 +69,18 @@ class JaxZheng07Sats(Zheng07Sats):
             mass = jnp.atleast_1d(kwargs['prim_haloprop'])
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
-                "to the ``mean_occupation`` function of the ``Zheng07Sats`` class.\n")
+                   "to the ``mean_occupation`` function of the ``Zheng07Sats`` class.\n")
             raise HalotoolsError(msg)
 
-        M0 = 10.**self.param_dict['logM0']
-        M1 = 10.**self.param_dict['logM1']
-
-        # Call to np.where raises a harmless RuntimeWarning exception if
-        # there are entries of input logM for which mean_nsat = 0
-        # Evaluating mean_nsat using the catch_warnings context manager
-        # suppresses this warning
-        mean_nsat = jnp.zeros_like(mass)
-
-        idx_nonzero = jnp.where(mass - M0 > 0)[0]
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-
-            # mean_nsat[idx_nonzero] = ((mass[idx_nonzero] - M0)/M1)**self.param_dict['alpha']
-            mean_nsat = jax.ops.index_update(
-                mean_nsat, idx_nonzero,
-                ((mass[idx_nonzero] - M0)/M1)**self.param_dict['alpha'])
+        mean_nsat = zheng07_satocc(mass, self.param_dict["logM0"],
+                                   self.param_dict["logM1"], self.param_dict["alpha"])
 
         # If a central occupation model was passed to the constructor,
         # multiply mean_nsat by an overall factor of mean_ncen
         if self.modulate_with_cenocc:
             # compatible with AB models
-            mean_ncen = getattr(self.central_occupation_model, "baseline_mean_occupation",\
-                                    self.central_occupation_model.mean_occupation)(**kwargs)
+            mean_ncen = getattr(self.central_occupation_model, "baseline_mean_occupation",
+                                self.central_occupation_model.mean_occupation)(**kwargs)
             mean_nsat *= mean_ncen
 
         return mean_nsat

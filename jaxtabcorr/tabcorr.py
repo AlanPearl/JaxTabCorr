@@ -1,8 +1,8 @@
-from tabcorr.tabcorr import *
-
 import jax
 from jax import numpy as jnp
-import numpy as np
+# import numpy as np
+
+from tabcorr.tabcorr import *
 
 
 class JaxTabCorr(TabCorr):
@@ -19,8 +19,8 @@ class JaxTabCorr(TabCorr):
             If True, the return values are dictionaries divided by each galaxy
             types contribution to the output result.
         **occ_kwargs : dict, optional
-                Keyword arguments passed to the ``mean_occupation`` functions
-                of the model.
+            Keyword arguments passed to the ``mean_occupation`` functions
+            of the model.
         Returns
         -------
         ngal : numpy.array or dict
@@ -62,71 +62,110 @@ class JaxTabCorr(TabCorr):
             raise RuntimeError('Mismatch in the secondary halo properties ' +
                                'of the model and the TabCorr instance.')
 
-        try:
-            assert jnp.abs(model.redshift - self.attrs['redshift']) < 0.05
-        except AssertionError:
-            raise RuntimeError('Mismatch in the redshift of the model and ' +
-                               'the TabCorr instance.')
+# TODO: Figure out how to add back in the redshift sanity check in a JAX-friendly way?
+# ====================================================================================
+#         try:
+#             assert abs(model.redshift - self.attrs['redshift']) < 0.05
+#         except AssertionError:
+#             raise RuntimeError('Mismatch in the redshift of the model and ' +
+#                                'the TabCorr instance.')
 
-        mean_occupation = jnp.zeros(len(self.gal_type))
-
-        mask = self.gal_type['gal_type'] == 'centrals'
+        mean_occupation = jnp.zeros(len(self.gal_type["gal_type"]))
+        mask = self.gal_type["gal_type"] == "centrals"
 
         mean_occupation = jax.ops.index_update(
             mean_occupation, mask,
             model.mean_occupation_centrals(
-                prim_haloprop=self.gal_type['prim_haloprop'][mask],
-                sec_haloprop_percentile=(
-                    self.gal_type['sec_haloprop_percentile'][mask]), **occ_kwargs)
+                prim_haloprop=self.gal_type["prim_haloprop"][mask],
+                sec_haloprop_percentile=self.gal_type["sec_haloprop_percentile"][mask],
+                **occ_kwargs)
         )
         mean_occupation = jax.ops.index_update(
             mean_occupation, ~mask,
             model.mean_occupation_satellites(
-                prim_haloprop=self.gal_type['prim_haloprop'][~mask],
-                sec_haloprop_percentile=(
-                    self.gal_type['sec_haloprop_percentile'][~mask]), **occ_kwargs)
+                prim_haloprop=self.gal_type["prim_haloprop"][~mask],
+                sec_haloprop_percentile=self.gal_type["sec_haloprop_percentile"][~mask],
+                **occ_kwargs)
         )
 
-        ngal = mean_occupation * self.gal_type['n_h'].data
+        return jaxtabcorr_predict(
+            mean_occupation,
+            self.gal_type["gal_type"] == "centrals",
+            self.gal_type["prim_haloprop"].data,
+            self.gal_type["sec_haloprop_percentile"].data,
+            self.gal_type["n_h"].data, self.tpcf_matrix,
+            self.tpcf_shape, self.attrs["mode"] == "cross",
+            separate_gal_type)
 
-        if self.attrs['mode'] == 'auto':
-            ngal_sq = jnp.outer(ngal, ngal)
-            ngal_sq = 2 * ngal_sq - jnp.diag(jnp.diag(ngal_sq))
-            ngal_sq = symmetric_matrix_to_array(ngal_sq)
 
-            xi = self.tpcf_matrix * ngal_sq / jnp.sum(ngal_sq)
-        elif self.attrs['mode'] == 'cross':
-            xi = self.tpcf_matrix * ngal / jnp.sum(ngal)
+def jaxtabcorr_predict(mean_occupation, is_centrals, prim_haloprop,
+                       sec_haloprop_percentile, n_h, tpcf_matrix,
+                       tpcf_shape, do_cross, separate_gal_type):
+    ngal = mean_occupation * n_h
 
-        if not separate_gal_type:
-            ngal = jnp.sum(ngal)
-            xi = jnp.sum(xi, axis=1).reshape(self.tpcf_shape)
-            return ngal, xi
+    if not do_cross:
+        ngal_sq = jnp.outer(ngal, ngal)
+        ngal_sq = 2 * ngal_sq - jnp.diag(jnp.diag(ngal_sq))
+        ngal_sq = jax_symmetric_matrix_to_array(ngal_sq)
+
+        xi = tpcf_matrix * ngal_sq / jnp.sum(ngal_sq)
+    else:
+        xi = tpcf_matrix * ngal / jnp.sum(ngal)
+
+    if not separate_gal_type:
+        ngal = jnp.sum(ngal)
+        xi = jnp.sum(xi, axis=1).reshape(tpcf_shape)
+        return ngal, xi
+    else:
+        ngal_dict = {}
+        xi_dict = {}
+
+        for gal_type, key in [(True, "centrals"), (False, "satellites")]:
+            mask = is_centrals == gal_type
+            ngal_type = jnp.where(mask, ngal, 0)
+            ngal_dict[key] = jnp.sum(ngal_type)  # <-- TODO: this will break
+
+        if not do_cross:
+            for gal_type_1, gal_type_2, name in [(True, True, "centrals-centrals"),
+                                                 (True, False, "centrals-satellites"),
+                                                 (False, False, "satellites-satellites")]:
+                mask = jax_symmetric_matrix_to_array(jnp.outer(
+                    gal_type_1 == is_centrals,
+                    gal_type_2 == is_centrals) |
+                        jnp.outer(
+                             gal_type_2 == is_centrals,
+                             gal_type_1 == is_centrals))
+                xi_dict[name] = jnp.sum(xi * mask, axis=1).reshape(tpcf_shape)
+
         else:
-            ngal_dict = {}
-            xi_dict = {}
+            for gal_type, key in [(True, "centrals"), (False, "satellites")]:
+                mask = is_centrals == gal_type
+                xi_dict[gal_type] = jnp.sum(
+                    xi * mask, axis=1).reshape(tpcf_shape)
 
-            for gal_type in np.unique(self.gal_type['gal_type']):
-                mask = self.gal_type['gal_type'] == gal_type
-                ngal_dict[gal_type] = jnp.sum(ngal[mask])
+        return ngal_dict, xi_dict
 
-            if self.attrs['mode'] == 'auto':
-                for gal_type_1, gal_type_2 in (
-                        itertools.combinations_with_replacement(
-                            np.unique(self.gal_type['gal_type']), 2)):
-                    mask = symmetric_matrix_to_array(jnp.outer(
-                        gal_type_1 == self.gal_type['gal_type'],
-                        gal_type_2 == self.gal_type['gal_type']) |
-                                                     jnp.outer(
-                                                         gal_type_2 == self.gal_type['gal_type'],
-                                                         gal_type_1 == self.gal_type['gal_type']))
-                    xi_dict['%s-%s' % (gal_type_1, gal_type_2)] = jnp.sum(
-                        xi * mask, axis=1).reshape(self.tpcf_shape)
+static_args = ["tpcf_shape", "do_cross", "separate_gal_type"]
+jaxtabcorr_predict = jax.jit(jaxtabcorr_predict,
+                             static_argnames=static_args)
 
-            elif self.attrs['mode'] == 'cross':
-                for gal_type in np.unique(self.gal_type['gal_type']):
-                    mask = self.gal_type['gal_type'] == gal_type
-                    xi_dict[gal_type] = jnp.sum(
-                        xi * mask, axis=1).reshape(self.tpcf_shape)
 
-            return ngal_dict, xi_dict
+def jax_symmetric_matrix_to_array(matrix):
+    # Assertions not allowed by jit :(
+    # try:
+    #     assert matrix.shape[0] == matrix.shape[1]
+    #     assert np.all(matrix == matrix.T)
+    # except AssertionError:
+    #     raise RuntimeError('The matrix you provided is not symmetric.')
+
+    n_dim = matrix.shape[0]
+    sel = jnp.zeros((n_dim**2 + n_dim) // 2, dtype=int)
+
+    for i in range(matrix.shape[0]):
+        sel = jax.ops.index_update(
+            sel, slice((i*(i+1))//2, (i*(i+1))//2+(i+1)),
+            jnp.arange(i*n_dim, i*n_dim + i + 1))
+#         sel[(i*(i+1))//2:(i*(i+1))//2+(i+1)] = jnp.arange(
+#             i*n_dim, i*n_dim + i + 1)
+
+    return matrix.ravel()[sel]
