@@ -1,6 +1,6 @@
-# JaxTabCorr - JAX + TabCorr
+# JaxTabCorr = JAX + TabCorr
 
-This is a partially rewritten version of the Python module TabCorr. It has been rewritten using JAX as a replacement for NumPy, which allows for easy differentiation, which is helpful for speeding up Bayesian inference compared to traditional MCMC methods. The API and following example script is nearly identical to that of TabCorr, allowing for minimal changes to preexisting code.
+This is a partially rewritten version of the Python module [TabCorr](https://github.com/johannesulf/TabCorr). It has been rewritten using JAX as a replacement for NumPy, which allows for easy differentiation, which is helpful for speeding up Bayesian inference compared to traditional MCMC methods. The API and following example script is nearly identical to that of TabCorr, allowing for minimal changes to preexisting code.
 
 # TabCorr - Tabulated Correlation functions for halotools
 
